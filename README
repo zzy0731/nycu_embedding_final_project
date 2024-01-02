@@ -5,6 +5,7 @@ gcc -o ./client ./client.c
 
 sudo ./yuan_new_server PORT
 sudo ./client 127.0.0.1 PORT
-'''
+```
+
 目前只能處理一批內容 (需要加個while)
-random 隨機不夠隨機
+client 產生出來的超參數不夠隨機
