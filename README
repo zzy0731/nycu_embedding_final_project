@@ -3,5 +3,5 @@
 gcc -o ./yuan_new_server ./yuan_new_server.c -pthread
 gcc -o ./client ./client.c
 
-./yuan_new_server PORT
-./client 127.0.0.1 PORT
+sudo ./yuan_new_server PORT
+sudo ./client 127.0.0.1 PORT

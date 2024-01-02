@@ -37,6 +37,7 @@ typedef struct {
 } ThreadArgs;
 
 int rolldice() {
+    // return 5 ;
     return rand() % 6 + 1;
 }
 void cleanup_shared_data(int signal) {
@@ -101,11 +102,13 @@ void * args_handler(void *args){
     pthread_barrier_wait(&barrier);
     printf("Current working thread priority is %d\t",arg->thread_priority);
     printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_times,arg->thread_vehicle_types );
-    for (int i = 0 ; i < arg->thread_batch_size ; i++){
-        printf("Current process parking_list is: %d, %d",arg->thread_result[i][1],arg->thread_result[i][2]);
-        printf("\t and driving time is %d \n",arg->thread_result[i][0]);
+    sleep(arg->thread_stay_times);
+    printf("process with priority %d end\n",arg->thread_priority);
+    // for (int i = 0 ; i < arg->thread_batch_size ; i++){
+    //     printf("Current process parking_list is: %d, %d",arg->thread_result[i][1],arg->thread_result[i][2]);
+    //     printf("\t and driving time is %d \n",arg->thread_result[i][0]);
 
-    }
+    // }
     
 }
 /*整體流程:
@@ -113,7 +116,7 @@ void * args_handler(void *args){
 int main(int argc, char **argv) {
     
 
-    srand(time(NULL)); // 初始化隨機生成器
+    srand((unsigned int)time(NULL)); // 初始化隨機生成器
     int server_fd, new_socket, client_sockets[MAX_CLIENTS];
     struct sockaddr_in address;
     int addrlen = sizeof(address);
@@ -194,7 +197,7 @@ int main(int argc, char **argv) {
         }
     }
     int *priorities = priority_list(all_client, *batch_size);
-    // we need proorities and result parking_list stay_time,vehicle_type and batch_size 
+    // we need proorities and result parking_list stay_time, vehicle_type and batch_size 
     //設定cpu 親合度
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);

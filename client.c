@@ -5,7 +5,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/shm.h>
-
+#include <time.h>
 #define KEY 1234
 
 key_t key = KEY;
@@ -18,8 +18,11 @@ typedef struct {
     int destination; //1F,2F,3F,4F...
 } client;
 
-client random_client() {
+client random_client(int seed) {
     client rand_client;
+    struct timespec ts;
+
+    srand(rand());
     rand_client.stay_time = rand() % 16 + 5;  //5~20
     rand_client.vip_level = rand() % 3 + 1;  //1~3
     rand_client.destination = rand() % 8 + 1;  //1~8
@@ -62,7 +65,7 @@ int main(int argc, char **argv) {
     serv_addr.sin_port = htons(atoi(argv[2]));
 
     for (int i = 0; i < *batch_size; i++) {
-        client client_info = random_client();
+        client client_info = random_client(i+1);
 
         if ((socks[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
             printf("\n Socket creation error \n");
