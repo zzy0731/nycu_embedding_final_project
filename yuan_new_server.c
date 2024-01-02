@@ -29,11 +29,11 @@ typedef struct {
 } client_with_index;
 
 typedef struct {
-    int thread_priority;
+    int thread_priority; // 這個 thread 的優先級
     int **thread_result;
-    int thread_stay_times;
-    int thread_vehicle_types;
-    int thread_batch_size;
+    int thread_stay_time; //這個client 要停留的時間
+    int thread_vehicle_type; //1:機車 2:汽車
+    int thread_batch_size; // 這批有多少
 } ThreadArgs;
 
 int rolldice() {
@@ -96,13 +96,46 @@ int *priority_list(client *all_client, int size) {
 void * args_handler(void *args){
     ThreadArgs *arg = (ThreadArgs *)args;
     struct sched_param param;
-    param.sched_priority = arg->thread_priority;
+    param.sched_priority = arg->thread_priority; //設定這一個thread 的priority
     pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
     // printf("current working thread priority is %d\n",arg->thread_priority);
-    pthread_barrier_wait(&barrier);
+    pthread_barrier_wait(&barrier); // 設一個barrier 等到全部thread 進來才離開
     printf("Current working thread priority is %d\t",arg->thread_priority);
-    printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_times,arg->thread_vehicle_types );
-    sleep(arg->thread_stay_times);
+
+    printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_time,arg->thread_vehicle_type );
+    int parking_list_index=0;
+    int val;
+    while( parking_list_index < arg->thread_batch_size){
+        sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val);  //獲得這個停車位的semaphore值
+        if (val >= arg->thread_vehicle_type){ // 確認 semaphore 數量足夠  thread_vehicle_type:1 表示機車 thread_vehicle_type:2 表示汽車
+            printf("parking pos is x:%d, y:%d\n",arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2]);
+            if (arg->thread_vehicle_type == 2){ //Car 需要兩個sempahore
+                sem_wait(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
+                sem_wait(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
+            }
+            else { //機車只需要一個sempahore 這邊好像只能這樣寫 
+                sem_wait(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
+            }
+            break;
+        }
+        else{ //這個index 的semphore已經被使用完 去下一個semaphore使用
+            parking_list_index++;
+        }
+    }
+    printf("current parking list index %d\n",parking_list_index);
+    sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val); 
+    printf("After get semaphore:%d\n",val); // 檢查是否有正確釋放 semaphore (目前看起來正常)
+    printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_time,arg->thread_vehicle_type );
+    sleep(arg->thread_stay_time); // 停車時間
+    if (arg->thread_vehicle_type == 2){ //停完之後釋放資源
+        sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]); 
+        sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
+    }
+    else{
+        sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
+    }
+    sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val);
+    printf("After release semaphore is: %d\n",val);
     printf("process with priority %d end\n",arg->thread_priority);
     // for (int i = 0 ; i < arg->thread_batch_size ; i++){
     //     printf("Current process parking_list is: %d, %d",arg->thread_result[i][1],arg->thread_result[i][2]);
@@ -115,7 +148,7 @@ void * args_handler(void *args){
  server這邊會隨機生成一個數字寫入shared memory，然後client那邊讀shared memory的數字生成相對應數量的client*/
 int main(int argc, char **argv) {
     
-
+    // printf("global variable:%d",parking_time[FLOORS][SPOTS_PER_FLOOR]);
     srand((unsigned int)time(NULL)); // 初始化隨機生成器
     int server_fd, new_socket, client_sockets[MAX_CLIENTS];
     struct sockaddr_in address;
@@ -178,24 +211,18 @@ int main(int argc, char **argv) {
         // printf("stay time: %d\n", all_client[connected_clients].stay_time);
         // printf("vip level: %d\n", all_client[connected_clients].vip_level);
         // printf("vehicle type: %s\n", all_client[connected_clients].vehicle_type);
-        printf("destination: %d\n",all_client[connected_clients].destination);
+        // printf("destination: %d\n",all_client[connected_clients].destination);
         destination_s[connected_clients] = all_client[connected_clients].destination;
         vehicle_type_s[connected_clients] = all_client[connected_clients].vehicle_type;
         connected_clients++;
     }
-    for (int i = 0; i<*batch_size ;i++){
-        printf("destination: %d\tvehicle_type:%d\tvip:%d\tstay_time:%d\n"\
+    for (int i = 0; i< *batch_size ; i++){
+        printf("destination: %d\t vehicle_type:%d\t vip:%d\tstay_time:%d\n"\
         ,all_client[i].destination, all_client[i].vehicle_type, all_client[i].vip_level, all_client[i].stay_time);
     }
     
     
-    int ***result = get_parking_list(destination_s, vehicle_type_s, *batch_size );
-    for (int i = 0; i < *batch_size; i++) {
-        printf("target floor: %d, vehicle type: %d\n", destination_s[i], vehicle_type_s[i]);
-        for (int j = 0; j < *batch_size; j++) {
-            printf("time: %d, index_x: %d, index_y: %d\n", result[i][j][0], result[i][j][1], result[i][j][2]);
-        }
-    }
+    int ***result = get_parking_list(destination_s, vehicle_type_s, *batch_size ); //獲得 parking list
     int *priorities = priority_list(all_client, *batch_size);
     // we need proorities and result parking_list stay_time, vehicle_type and batch_size 
     //設定cpu 親合度
@@ -204,16 +231,16 @@ int main(int argc, char **argv) {
     int cpu_id=3;
     CPU_SET(cpu_id, &cpuset);
     int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
-    //創建 thread 所需要之arguments
+    //創建 thread 所需要之arguments(我用另一個結構去接寫在ThreadArgs裡
     pthread_t thread_ids[MAX_CLIENTS];
     ThreadArgs thread_args[MAX_CLIENTS];
     for (int thread_id =0; thread_id< *batch_size; thread_id++ ){
         thread_args[thread_id].thread_priority = priorities[thread_id];
-        thread_args[thread_id].thread_stay_times = all_client[thread_id].stay_time;
-        thread_args[thread_id].thread_vehicle_types = all_client[thread_id].vehicle_type;
+        thread_args[thread_id].thread_stay_time = all_client[thread_id].stay_time;
+        thread_args[thread_id].thread_vehicle_type = all_client[thread_id].vehicle_type;
         thread_args[thread_id].thread_batch_size = *batch_size;
         thread_args[thread_id].thread_result = result[thread_id];
-        if (pthread_create(&thread_ids[thread_id], NULL, args_handler, &thread_args[thread_id]) != 0) {
+        if (pthread_create(&thread_ids[thread_id], NULL, args_handler, &thread_args[thread_id]) != 0) { //將這些參數丟到thread 裡面去處理
             perror("pthread_create failed");
             exit(EXIT_FAILURE);
         }
@@ -226,9 +253,12 @@ int main(int argc, char **argv) {
         free(priorities);
     }
 
-    // 向所有客户端發送信號
+    // 向所有客户端發送信號目前好像是有點多餘
     for (int i = 0; i < *batch_size; i++) {
         send(client_sockets[i], "start", strlen("start"), 0);
+    }
+    for (int i = 0; i < *batch_size; i++) { // 如果有while迴圈的話這邊要注意一下不然可能會等到這邊thread 執行完 才去執行下一個while
+        pthread_join(thread_ids[i], NULL);
     }
 
     printf("Signal sent to all clients. Exiting.\n");
@@ -241,8 +271,6 @@ int main(int argc, char **argv) {
         close(client_sockets[i]);
     }
     close(server_fd);
-    while (1) {
-
-    }
+    
     return 0;
 }
