@@ -1,4 +1,5 @@
 #include <stdio.h>
+#define __USE_GNU
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -7,11 +8,12 @@
 #include <sys/shm.h>
 #include <signal.h>
 #include <time.h>
+#include <pthread.h>
 #include "parking.h"
 
 #define MAX_CLIENTS 10
 #define KEY 1234
-
+pthread_barrier_t barrier; // 定義一個柵欄變量
 int shmid;
 key_t key = KEY;
 typedef struct {
@@ -25,6 +27,14 @@ typedef struct {
     client *client_ptr;
     int original_index;
 } client_with_index;
+
+typedef struct {
+    int thread_priority;
+    int **thread_result;
+    int thread_stay_times;
+    int thread_vehicle_types;
+    int thread_batch_size;
+} ThreadArgs;
 
 int rolldice() {
     return rand() % 6 + 1;
@@ -82,10 +92,27 @@ int *priority_list(client *all_client, int size) {
     free(indexed_clients);
     return priorities;
 }
+void * args_handler(void *args){
+    ThreadArgs *arg = (ThreadArgs *)args;
+    struct sched_param param;
+    param.sched_priority = arg->thread_priority;
+    pthread_setschedparam(pthread_self(), SCHED_FIFO, &param);
+    // printf("current working thread priority is %d\n",arg->thread_priority);
+    pthread_barrier_wait(&barrier);
+    printf("Current working thread priority is %d\t",arg->thread_priority);
+    printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_times,arg->thread_vehicle_types );
+    for (int i = 0 ; i < arg->thread_batch_size ; i++){
+        printf("Current process parking_list is: %d, %d",arg->thread_result[i][1],arg->thread_result[i][2]);
+        printf("\t and driving time is %d \n",arg->thread_result[i][0]);
 
+    }
+    
+}
 /*整體流程:
  server這邊會隨機生成一個數字寫入shared memory，然後client那邊讀shared memory的數字生成相對應數量的client*/
 int main(int argc, char **argv) {
+    
+
     srand(time(NULL)); // 初始化隨機生成器
     int server_fd, new_socket, client_sockets[MAX_CLIENTS];
     struct sockaddr_in address;
@@ -101,6 +128,8 @@ int main(int argc, char **argv) {
 
     *batch_size = rolldice();
     printf("Dice: %d\n", *batch_size);
+    
+    pthread_barrier_init(&barrier, NULL, *batch_size);
     
     // 創建socket文件描述符
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
@@ -164,10 +193,29 @@ int main(int argc, char **argv) {
             printf("time: %d, index_x: %d, index_y: %d\n", result[i][j][0], result[i][j][1], result[i][j][2]);
         }
     }
-
-    free(destination_s);
-    free(vehicle_type_s);
     int *priorities = priority_list(all_client, *batch_size);
+    // we need proorities and result parking_list stay_time,vehicle_type and batch_size 
+    //設定cpu 親合度
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    int cpu_id=3;
+    CPU_SET(cpu_id, &cpuset);
+    int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
+    //創建 thread 所需要之arguments
+    pthread_t thread_ids[MAX_CLIENTS];
+    ThreadArgs thread_args[MAX_CLIENTS];
+    for (int thread_id =0; thread_id< *batch_size; thread_id++ ){
+        thread_args[thread_id].thread_priority = priorities[thread_id];
+        thread_args[thread_id].thread_stay_times = all_client[thread_id].stay_time;
+        thread_args[thread_id].thread_vehicle_types = all_client[thread_id].vehicle_type;
+        thread_args[thread_id].thread_batch_size = *batch_size;
+        thread_args[thread_id].thread_result = result[thread_id];
+        if (pthread_create(&thread_ids[thread_id], NULL, args_handler, &thread_args[thread_id]) != 0) {
+            perror("pthread_create failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+
     if (priorities != NULL) {
         for (int i = 0; i < *batch_size; i++) {
             printf("Client %d - Priority: %d\n", i, priorities[i]);
@@ -182,6 +230,9 @@ int main(int argc, char **argv) {
 
     printf("Signal sent to all clients. Exiting.\n");
     free(all_client);
+    free(destination_s);
+    free(vehicle_type_s);
+    pthread_barrier_destroy(&barrier);
     // 關閉所有socket
     for (int i = 0; i < *batch_size; i++) {
         close(client_sockets[i]);
