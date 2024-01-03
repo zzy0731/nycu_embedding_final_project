@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     }
     int *batch_size = (int *) shmat(shmid, (void *)0, 0); // 將共享mem加到process的addr space
     while (1){
-        sleep();
+        sleep(2);
         if (batch_size == (int *) -1) {
             perror("shmat failed");
             exit(1);
