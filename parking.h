@@ -2,8 +2,8 @@
 #include <semaphore.h>
 #include <stdlib.h>
 
-#define FLOORS 8
-#define SPOTS_PER_FLOOR 8
+#define FLOORS 12
+#define SPOTS_PER_FLOOR 12
 #define MAX_TIME 999
 
 sem_t parking_spots[FLOORS][SPOTS_PER_FLOOR];
