@@ -38,13 +38,13 @@ void clearTerminal() {
 void printColored(int value) {
     switch (value) {
         case 0:
-            printf("\033[1;31m0\033[0m "); // Red
+            printf("\033[1;91m0\033[0m "); // Lighter Red
             break;
         case 1:
-            printf("\033[1;33m1\033[0m "); // Yellow
+            printf("\033[1;93m1\033[0m "); // Lighter Yellow
             break;
         case 2:
-            printf("\033[1;32m2\033[0m "); // Green
+            printf("\033[1;92m2\033[0m "); // Bright Green
             break;
         default:
             printf("%d ", value);
