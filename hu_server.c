@@ -127,10 +127,12 @@ void * args_handler(void *args){
     }
     printf("current parking list index %d\n",parking_list_index);
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val); 
-    printf("After get semaphore:%d\n",val); // 檢查是否有正確釋放 semaphore (目前看起來正常)
+    printf("pos %d %d after get semaphore:%d\n",\
+    arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2],val); // 檢查是否有正確釋放 semaphore (目前看起來正常)
+    
     printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_time,arg->thread_vehicle_type );
     pthread_barrier_wait(&batch_barrier);
-    sleep(arg->thread_stay_time); // 停車時間 ?
+    sleep(arg->thread_stay_time + arg->thread_result[parking_list_index][0]); // 停車時間 ?
     if (arg->thread_vehicle_type == 2){ //停完之後釋放資源
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]); 
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
@@ -139,7 +141,10 @@ void * args_handler(void *args){
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
     }
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val);
-    printf("After release semaphore is: %d\n",val);
+
+    printf("thread_id:%d, Pos %d %d after release semaphore is: %d\n",\
+    arg->thread_id,arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2],val);
+
     printf("process with priority %d end\n",arg->thread_priority);
     // for (int i = 0 ; i < arg->thread_batch_size ; i++){
     //     printf("Current process parking_list is: %d, %d",arg->thread_result[i][1],arg->thread_result[i][2]);
@@ -209,12 +214,12 @@ int main(int argc, char **argv) {
         int *destination_s = malloc(*batch_size * sizeof(int));
         int *vehicle_type_s = malloc(*batch_size * sizeof(int));
         while (connected_clients < *batch_size) {
-            printf("Waiting for clients...\n");
+            // printf("Waiting for clients...\n");
             if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen))<0) {
                 perror("accept");
                 exit(EXIT_FAILURE);
             }
-            printf("Client connected\n");
+            // printf("Client connected\n");
             client_sockets[connected_clients] = new_socket;
             recv(new_socket, &all_client[connected_clients], sizeof(client), 0);
             // printf("stay time: %d\n", all_client[connected_clients].stay_time);

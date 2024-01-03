@@ -25,7 +25,7 @@ client random_client(int seed) {
     srand(rand());
     rand_client.stay_time = rand() % 16 + 5;  //5~20
     rand_client.vip_level = rand() % 3 + 1;  //1~3
-    rand_client.destination = rand() % 8 + 1;  //1~8
+    rand_client.destination = rand() % 8 ;  //1~8
     rand_client.vehivle_type = rand() % 2 +1; //1~2
     // const char *vehicleTypes[2] = {"scooter", "car"};
     // int randIndex = rand() % 2; 
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     }
     int *batch_size = (int *) shmat(shmid, (void *)0, 0); // 將共享mem加到process的addr space
     while (1){
-        sleep(2);
+        sleep(5);
         if (batch_size == (int *) -1) {
             perror("shmat failed");
             exit(1);
