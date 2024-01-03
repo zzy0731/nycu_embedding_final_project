@@ -24,51 +24,57 @@ int areMatricesEqual(int matrix1[MATRIX_SIZE][MATRIX_SIZE], int matrix2[MATRIX_S
     for (int i = 0; i < MATRIX_SIZE; i++) {
         for (int j = 0; j < MATRIX_SIZE; j++) {
             if (matrix1[i][j] != matrix2[i][j]) {
-                return 0; 
+                return 0;
             }
         }
     }
-    return 1; 
+    return 1;
+}
+
+void clearTerminal() {
+    printf("\033[H\033[J"); // ANSI escape code to clear the screen
+}
+
+void printColored(int value) {
+    switch (value) {
+        case 0:
+            printf("\033[1;31m0\033[0m "); // Red
+            break;
+        case 1:
+            printf("\033[1;33m1\033[0m "); // Yellow
+            break;
+        case 2:
+            printf("\033[1;32m2\033[0m "); // Green
+            break;
+        default:
+            printf("%d ", value);
+    }
 }
 
 int main() {
     key_t key_demo = 2347;
     int save_previous[MATRIX_SIZE][MATRIX_SIZE] = {0};
     int demo_shmid = shmget(key_demo, sizeof(int) * MATRIX_SIZE * MATRIX_SIZE, 0666);
-    int (*matrix)[MATRIX_SIZE] = (int (*)[MATRIX_SIZE])shmat(demo_shmid, NULL, 0); 
-    for (int i=0; i< MATRIX_SIZE; ++i) {
-        for (int j=0; j< MATRIX_SIZE; ++j) {
-            matrix[i][j] = 2;
+    int (*matrix)[MATRIX_SIZE] = (int (*)[MATRIX_SIZE])shmat(demo_shmid, NULL, 0);
+    for (int i = 0; i < MATRIX_SIZE; ++i) {
+        for (int j = 0; j < MATRIX_SIZE; ++j) {
+            matrix[i][j] = rand() % 3; // Initialize with random values (0, 1, 2)
         }
     }
-    while(1) {
+    while (1) {
         if (areMatricesEqual((int (*)[MATRIX_SIZE])save_previous, matrix) == 0) {
-            printf("Paking lot status\n");
+            clearTerminal();
+            printf("Parking lot status\n");
             for (int i = 0; i < MATRIX_SIZE; ++i) {
                 for (int j = 0; j < MATRIX_SIZE; ++j) {
-                    printf("%d ", matrix[MATRIX_SIZE - 1 - i][j]);
+                    printColored(matrix[MATRIX_SIZE - 1 - i][j]);
                 }
                 printf("\n");
             }
             printf("\n");
         }
-        // printf("matrix:\n");
-        // for (int i = 0; i < MATRIX_SIZE; ++i) {
-        //         for (int j = 0; j < MATRIX_SIZE; ++j) {
-        //             printf("%d ", matrix[MATRIX_SIZE - 1 - i][j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("\n");
         copyMatrix(matrix, (int (*)[MATRIX_SIZE])save_previous);
-        // printf("after copy:\n");
-        // for (int i = 0; i < MATRIX_SIZE; ++i) {
-        //         for (int j = 0; j < MATRIX_SIZE; ++j) {
-        //             printf("%d ", save_previous[MATRIX_SIZE - 1 - i][j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("\n");
+        // Add a sleep or delay here if you want to control the update speed
     }
     return 0;
 }
