@@ -11,12 +11,15 @@
 #include <pthread.h>
 #include "parking.h"
 
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 1000
 #define KEY 1234
 pthread_barrier_t priority_barrier, batch_barrier; // 定義一個柵欄變量
 
 int shmid;
 key_t key = KEY;
+int demo_shmid;//
+key_t key_demo = 2345;
+int (*matrix)[8];//8層樓
 typedef struct {
     int stay_time; //5-20sec
     int vip_level; // platinum(1) gold(2) normal(3)
@@ -52,6 +55,17 @@ void cleanup_shared_data(int signal) {
         printf("cleanup shared memory\n");
     }
     exit(0);
+}
+void update_demo_matrix() {
+    for (int i=0; i<8; ++i) {
+        for (int j=0; j<8; ++j) {
+            int sem_val;
+            sem_getvalue(&parking_spots[i][j], &sem_val);
+            matrix[i][j] = sem_val;
+            // printf("%d ", matrix[i][j]);
+        }
+        // printf("\n");
+    }
 }
 // 比較函數，用於排序
 int compare_clients(const void *a, const void *b) {
@@ -96,20 +110,7 @@ int *priority_list(client *all_client, int size) {
     free(indexed_clients);
     return priorities;
 }
-int matrix [8][8];
-void update_demo_matrix() {
-    for (int i=0; i<8; ++i) {
-        for (int j=0; j<8; ++j) {
-            int sem_val;
-            sem_getvalue(&parking_spots[i][j], &sem_val);
-            matrix[i][j] = sem_val;
-            printf("%d ", matrix[i][j]);
-        }
-        printf("\n");
-    }
-}
 void * args_handler(void *args){
-    
     ThreadArgs *arg = (ThreadArgs *)args;
     struct sched_param param;
     param.sched_priority = arg->thread_priority; //設定這一個thread 的priority
@@ -138,15 +139,14 @@ void * args_handler(void *args){
             parking_list_index++;
         }
     }
-    printf("current parking list index %d\n",parking_list_index);
+    update_demo_matrix();
+    // printf("current parking list index %d\n",parking_list_index);
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val); 
     printf("pos %d %d after get semaphore:%d\n",\
     arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2],val); // 檢查是否有正確釋放 semaphore (目前看起來正常)
-    
     printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_time,arg->thread_vehicle_type );
     pthread_barrier_wait(&batch_barrier);
-    sleep(arg->thread_stay_time + arg->thread_result[parking_list_index][0]); // 停車時間
-
+    sleep(arg->thread_stay_time); // 停車時間 ?
     if (arg->thread_vehicle_type == 2){ //停完之後釋放資源
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]); 
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
@@ -155,17 +155,10 @@ void * args_handler(void *args){
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
     }
     update_demo_matrix();
+    printf("\n");
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val);
-
     printf("thread_id:%d, Pos %d %d after release semaphore is: %d\n",\
     arg->thread_id,arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2],val);
-
-    printf("process with priority %d end\n",arg->thread_priority);
-    // for (int i = 0 ; i < arg->thread_batch_size ; i++){
-    //     printf("Current process parking_list is: %d, %d",arg->thread_result[i][1],arg->thread_result[i][2]);
-    //     printf("\t and driving time is %d \n",arg->thread_result[i][0]);
-
-    // }
     close(arg->client_sockets[arg->thread_id]); // 關閉這個thread 的socket
     pthread_exit(NULL);
 }
@@ -181,6 +174,9 @@ int main(int argc, char **argv) {
     int connected_clients = 0;
     init_parking_spots();
     shmid = shmget(key, sizeof(int), 0644|IPC_CREAT);
+    shmid = shmget(key, sizeof(int), 0644|IPC_CREAT);
+    demo_shmid = shmget(key_demo, sizeof(int) * 8 * 8, IPC_CREAT | 0666);
+    matrix = (int (*)[8])shmat(demo_shmid, NULL, 0); //將此共享矩陣加入process addr space
     int *batch_size = (int *) shmat(shmid, (void *)0, 0); // 將共享mem加到process的addr space
     if (batch_size == (int *) -1) {
         perror("shmat failed");
@@ -219,6 +215,7 @@ int main(int argc, char **argv) {
         exit(EXIT_FAILURE);
     }
     signal(SIGINT, cleanup_shared_data);
+    int last_thread_id = 0;
     while(1){
         *batch_size = rolldice();
         printf("Dice: %d\n", *batch_size);
@@ -263,20 +260,23 @@ int main(int argc, char **argv) {
         //創建 thread 所需要之arguments(我用另一個結構去接寫在ThreadArgs裡
         pthread_t thread_ids[MAX_CLIENTS];
         ThreadArgs thread_args[MAX_CLIENTS];
-        for (int thread_id =0; thread_id< *batch_size; thread_id++ ){
-            thread_args[thread_id].thread_priority = priorities[thread_id];
-            thread_args[thread_id].thread_stay_time = all_client[thread_id].stay_time;
-            thread_args[thread_id].thread_vehicle_type = all_client[thread_id].vehicle_type;
+        // 在創建新線程時，從上一批線程的最後一個線程ID後開始
+        for (int thread_id = last_thread_id; thread_id < last_thread_id + *batch_size; thread_id++ ){
+            thread_args[thread_id].thread_priority = priorities[thread_id - last_thread_id];
+            thread_args[thread_id].thread_stay_time = all_client[thread_id - last_thread_id].stay_time;
+            thread_args[thread_id].thread_vehicle_type = all_client[thread_id - last_thread_id].vehicle_type;
             thread_args[thread_id].thread_batch_size = *batch_size;
-            thread_args[thread_id].thread_result = result[thread_id];
+            thread_args[thread_id].thread_result = result[thread_id - last_thread_id];
             thread_args[thread_id].client_sockets = client_sockets;
             thread_args[thread_id].thread_id = thread_id;
-            if (pthread_create(&thread_ids[thread_id], NULL, args_handler, &thread_args[thread_id]) != 0) { //將這些參數丟到thread 裡面去處理
+            if (pthread_create(&thread_ids[thread_id], NULL, args_handler, &thread_args[thread_id]) != 0) {
                 perror("pthread_create failed");
                 exit(EXIT_FAILURE);
             }
-            pthread_detach(thread_ids[thread_id]); // 使用 pthread_detach 代替 pthread_join
+            pthread_detach(thread_ids[thread_id]);
         }
+        // 更新最後一個線程ID的值
+        last_thread_id += *batch_size;
 
         if (priorities != NULL) {
             for (int i = 0; i < *batch_size; i++) {

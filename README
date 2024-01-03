@@ -1,11 +1,10 @@
 ### Usage
 ```bash
-gcc -o ./yuan_new_server ./yuan_new_server.c -pthread
-gcc -o ./client ./client.c
+gcc -o ./new_server ./new_new_server.c -pthread
+gcc -o ./new_client ./new_client.c
 
-sudo ./yuan_new_server PORT
-sudo ./client 127.0.0.1 PORT
+sudo ./new_server PORT
+sudo ./new_client 127.0.0.1 PORT
+./demo.c
 ```
 
-目前只能處理一批內容 (需要加個while)
-client 產生出來的超參數不夠隨機
