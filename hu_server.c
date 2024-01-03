@@ -96,7 +96,20 @@ int *priority_list(client *all_client, int size) {
     free(indexed_clients);
     return priorities;
 }
+int matrix [8][8];
+void update_demo_matrix() {
+    for (int i=0; i<8; ++i) {
+        for (int j=0; j<8; ++j) {
+            int sem_val;
+            sem_getvalue(&parking_spots[i][j], &sem_val);
+            matrix[i][j] = sem_val;
+            printf("%d ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+}
 void * args_handler(void *args){
+    
     ThreadArgs *arg = (ThreadArgs *)args;
     struct sched_param param;
     param.sched_priority = arg->thread_priority; //設定這一個thread 的priority
@@ -132,7 +145,8 @@ void * args_handler(void *args){
     
     printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_time,arg->thread_vehicle_type );
     pthread_barrier_wait(&batch_barrier);
-    sleep(arg->thread_stay_time + arg->thread_result[parking_list_index][0]); // 停車時間 ?
+    sleep(arg->thread_stay_time + arg->thread_result[parking_list_index][0]); // 停車時間
+
     if (arg->thread_vehicle_type == 2){ //停完之後釋放資源
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]); 
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
@@ -140,6 +154,7 @@ void * args_handler(void *args){
     else{
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
     }
+    update_demo_matrix();
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val);
 
     printf("thread_id:%d, Pos %d %d after release semaphore is: %d\n",\
