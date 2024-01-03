@@ -18,7 +18,7 @@ int shmid;
 key_t key = KEY;
 int demo_shmid;//
 key_t key_demo = 2347;
-int (*matrix)[12];//8層樓
+int (*matrix)[16];//8層樓
 typedef struct {
     int stay_time; //5-20sec
     int vip_level; // platinum(1) gold(2) normal(3)
@@ -42,7 +42,7 @@ typedef struct {
 
 int rolldice() {
     // return 5 ;
-    return rand() % 15 + 1;
+    return rand() % 50 + 1;
 }
 void cleanup_shared_data(int signal) {
     if (shmid != -1) {
@@ -65,7 +65,7 @@ client random_client(int seed) {
     srand(rand());
     rand_client.stay_time = rand() % 16 + 5;  //5~20
     rand_client.vip_level = rand() % 3 + 1;  //1~3
-    rand_client.destination = rand() % 12 ;  //0~16
+    rand_client.destination = rand() % 16 ;  //0~16
     rand_client.vehicle_type = rand() % 2 +1; //1~2
     // const char *vehicleTypes[2] = {"scooter", "car"};
     // int randIndex = rand() % 2; 
@@ -74,8 +74,8 @@ client random_client(int seed) {
     return rand_client;
 }
 void update_demo_matrix() {
-    for (int i=0; i<12; ++i) {
-        for (int j=0; j<12; ++j) {
+    for (int i=0; i<16; ++i) {
+        for (int j=0; j<16; ++j) {
             int sem_val;
             sem_getvalue(&parking_spots[i][j], &sem_val);
             matrix[i][j] = sem_val;
@@ -190,8 +190,8 @@ int main(int argc, char **argv) {
     int connected_clients = 0;
     init_parking_spots();
     shmid = shmget(key, sizeof(int), 0644|IPC_CREAT);
-    demo_shmid = shmget(key_demo, sizeof(int) * 12 * 12, IPC_CREAT | 0666);
-    matrix = (int (*)[12])shmat(demo_shmid, NULL, 0); //將此共享矩陣加入process addr space
+    demo_shmid = shmget(key_demo, sizeof(int) * 16 * 16, IPC_CREAT | 0666);
+    matrix = (int (*)[16])shmat(demo_shmid, NULL, 0); //將此共享矩陣加入process addr space
     int *batch_size = (int *) shmat(shmid, (void *)0, 0); // 將共享mem加到process的addr space
     if (batch_size == (int *) -1) {
         perror("shmat failed");
@@ -207,6 +207,19 @@ int main(int argc, char **argv) {
         pthread_barrier_init(&batch_barrier, NULL, *batch_size+1);//多一個main thread
         pthread_barrier_init(&priority_barrier, NULL, *batch_size);
         client *all_client = (client *)malloc(*batch_size * sizeof(client));
+        int spot_counts[3] = {0, 0, 0}; // 分別記錄三種車輛類型的停車位數量
+
+            // 計算每種車輛類型的停車位數量
+        for (int i = 0; i < FLOORS; i++) {
+            for (int j = 0; j < SPOTS_PER_FLOOR; j++) {
+                int value;
+                sem_getvalue(&parking_spots[i][j], &value);
+                spot_counts[value]++;
+            }
+        }
+        if (spot_counts[2] < *batch_size){
+            sleep(10);
+        }
         
         // 等待客户端連接
         sleep(1);
@@ -268,16 +281,16 @@ int main(int argc, char **argv) {
         }
         pthread_barrier_wait(&batch_barrier); // 等待所有客戶進入sleep狀態
        
-        int spot_counts[3] = {0, 0, 0}; // 分別記錄三種車輛類型的停車位數量
+        // int spot_counts[3] = {0, 0, 0}; // 分別記錄三種車輛類型的停車位數量
 
-            // 計算每種車輛類型的停車位數量
-        for (int i = 0; i < FLOORS; i++) {
-            for (int j = 0; j < SPOTS_PER_FLOOR; j++) {
-                int value;
-                sem_getvalue(&parking_spots[i][j], &value);
-                spot_counts[value]++;
-            }
-        }
+        //     // 計算每種車輛類型的停車位數量
+        // for (int i = 0; i < FLOORS; i++) {
+        //     for (int j = 0; j < SPOTS_PER_FLOOR; j++) {
+        //         int value;
+        //         sem_getvalue(&parking_spots[i][j], &value);
+        //         spot_counts[value]++;
+        //     }
+        // }
         //convert (spot_counts[2])to char use sprintf
         char str[4]; // 假設我們的整數不會超過 10 億
         sprintf(str, "%d", spot_counts[2]);
