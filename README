@@ -1,10 +1,10 @@
 ### Usage
 ```bash
-gcc -o ./new_server ./new_new_server.c -pthread
-gcc -o ./new_client ./new_client.c
+gcc -o ./merge ./merge.c -pthread
 
-sudo ./new_server PORT
-sudo ./new_client 127.0.0.1 PORT
+gcc -o ./demo ./demo.c
+
+sudo ./merge 
 ./demo.c
 ```
 
