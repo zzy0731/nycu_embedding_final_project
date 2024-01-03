@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include "parking.h"
 
-#define MATRIX_SIZE 12
+#define MATRIX_SIZE 16
 
 void copyMatrix(int src[MATRIX_SIZE][MATRIX_SIZE], int dest[MATRIX_SIZE][MATRIX_SIZE]) {
     for (int i = 0; i < MATRIX_SIZE; i++) {
