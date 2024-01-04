@@ -13,12 +13,14 @@
 #define MAX_CLIENTS 1000
 #define KEY 1234
 pthread_barrier_t priority_barrier, batch_barrier; // 定義一個柵欄變量
+pthread_mutex_t lock; // 定義一個全局的 mutex
 
 int shmid;
 key_t key = KEY;
 int demo_shmid;//
 key_t key_demo = 2347;
 int (*matrix)[16];//8層樓
+int thread_status[MAX_CLIENTS] = {0}; // 用來追蹤每個線程的狀態
 typedef struct {
     int stay_time; //5-20sec
     int vip_level; // platinum(1) gold(2) normal(3)
@@ -156,7 +158,7 @@ void * args_handler(void *args){
             parking_list_index++;
         }
     }
-    printf("gogogo\n");
+    //printf("gogogo\n");
     update_demo_matrix();
     // printf("current parking list index %d\n",parking_list_index);
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val); 
@@ -164,7 +166,7 @@ void * args_handler(void *args){
     arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2],val); // 檢查是否有正確釋放 semaphore (目前看起來正常)
     printf("Current processes stay time is %d\t vehicle_type is: %d\n",arg->thread_stay_time,arg->thread_vehicle_type );
     pthread_barrier_wait(&batch_barrier);
-    sleep(arg->thread_stay_time); // 停車時間 ?
+    sleep(arg->thread_stay_time + arg->thread_result[parking_list_index][0]); // 停車時間 
     if (arg->thread_vehicle_type == 2){ //停完之後釋放資源
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]); 
         sem_post(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]]);
@@ -177,7 +179,9 @@ void * args_handler(void *args){
     sem_getvalue(&parking_spots[arg->thread_result[parking_list_index][1]][arg->thread_result[parking_list_index][2]], &val);
     printf("thread_id:%d, Pos %d %d after release semaphore is: %d\n",\
     arg->thread_id,arg->thread_result[parking_list_index][1],arg->thread_result[parking_list_index][2],val);
-    
+    pthread_mutex_lock(&lock); // 獲取鎖
+    thread_status[arg->thread_id] = 0;
+    pthread_mutex_unlock(&lock); // 釋放鎖
     pthread_exit(NULL);
 }
 /*整體流程:
@@ -207,6 +211,11 @@ int main(int argc, char **argv) {
         pthread_barrier_init(&batch_barrier, NULL, *batch_size+1);//多一個main thread
         pthread_barrier_init(&priority_barrier, NULL, *batch_size);
         client *all_client = (client *)malloc(*batch_size * sizeof(client));
+        // 初始化 mutex
+        if (pthread_mutex_init(&lock, NULL) != 0) {
+            perror("pthread_mutex_init failed");
+            exit(EXIT_FAILURE);
+        }
         int spot_counts[3] = {0, 0, 0}; // 分別記錄三種車輛類型的停車位數量
 
             // 計算每種車輛類型的停車位數量
@@ -243,6 +252,7 @@ int main(int argc, char **argv) {
         
         int ***result = get_parking_list(destination_s, vehicle_type_s, *batch_size ); //獲得 parking list
         int *priorities = priority_list(all_client, *batch_size);
+        
         // we need proorities and result parking_list stay_time, vehicle_type and batch_size 
         //設定cpu 親合度
         cpu_set_t cpuset;
@@ -251,25 +261,56 @@ int main(int argc, char **argv) {
         CPU_SET(cpu_id, &cpuset);
         int rc = pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset);
 
-
+        
         //創建 thread 所需要之arguments(我用另一個結構去接寫在ThreadArgs裡
         pthread_t thread_ids[MAX_CLIENTS];
         ThreadArgs thread_args[MAX_CLIENTS];
-        // 在創建新線程時，從上一批線程的最後一個線程ID後開始
-        for (int thread_id = last_thread_id; thread_id < last_thread_id + *batch_size; thread_id++ ){
-            thread_args[thread_id].thread_priority = priorities[thread_id - last_thread_id];
-            thread_args[thread_id].thread_stay_time = all_client[thread_id - last_thread_id].stay_time;
-            thread_args[thread_id].thread_vehicle_type = all_client[thread_id - last_thread_id].vehicle_type;
-            thread_args[thread_id].thread_batch_size = *batch_size;
-            thread_args[thread_id].thread_result = result[thread_id - last_thread_id];
-        
-            thread_args[thread_id].thread_id = thread_id;
-            if (pthread_create(&thread_ids[thread_id], NULL, args_handler, &thread_args[thread_id]) != 0) {
+        // 在創建新線程時，選擇 thread_status 陣列中第一個可用的元素
+        for (int i = 0; i < *batch_size; i++ ){
+            int thread_index = -1;
+
+            // 尋找第一個可用的 thread_status 元素
+            pthread_mutex_lock(&lock); // 獲取鎖
+            for (int j = 0; j < MAX_CLIENTS; j++) {
+                if (thread_status[j] == 0) {
+                    thread_index = j;
+                    thread_status[j] = 1; // 標記線程為正在運行
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&lock); // 釋放鎖
+
+            if (thread_index == -1) {
+                perror("No available thread slot");
+                sleep(10);
+                // 尋找第一個可用的 thread_status 元素
+                pthread_mutex_lock(&lock); // 獲取鎖
+                for (int j = 0; j < MAX_CLIENTS; j++) {
+                    if (thread_status[j] == 0) {
+                        thread_index = j;
+                        thread_status[j] = 1; // 標記線程為正在運行
+                        break;
+                    }
+                }
+                pthread_mutex_unlock(&lock); // 釋放鎖
+                // exit(EXIT_FAILURE);
+            }
+
+            thread_args[thread_index].thread_priority = priorities[i];
+            thread_args[thread_index].thread_stay_time = all_client[i].stay_time;
+            thread_args[thread_index].thread_vehicle_type = all_client[i].vehicle_type;
+            thread_args[thread_index].thread_batch_size = *batch_size;
+            thread_args[thread_index].thread_result = result[i];
+            thread_args[thread_index].thread_id = thread_index;
+
+            if (pthread_create(&thread_ids[thread_index], NULL, args_handler, &thread_args[thread_index]) != 0) {
                 perror("pthread_create failed");
                 exit(EXIT_FAILURE);
             }
-            pthread_detach(thread_ids[thread_id]);
+
+            pthread_detach(thread_ids[thread_index]);
         }
+        
         // 更新最後一個線程ID的值
         last_thread_id += *batch_size;
 
