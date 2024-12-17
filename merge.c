@@ -19,6 +19,10 @@ void test()
     printf("test add in file a");
 }
 
+
+void testc(){ // 加入新function
+    printf("c function!");
+}
 int shmid;
 key_t key = KEY;
 int demo_shmid;//
