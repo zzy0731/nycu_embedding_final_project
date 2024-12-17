@@ -7,4 +7,5 @@ gcc -o ./demo ./demo.c
 sudo ./merge 
 ./demo.c
 ```
-modify new data in test a
+modify new data in test a 
+add new data in dir a modify
