@@ -7,6 +7,6 @@ gcc -o ./demo ./demo.c
 sudo ./merge 
 ./demo.c
 ```
-a
+modify in main branch2
 add in file b
 modify in main branch
