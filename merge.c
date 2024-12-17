@@ -19,6 +19,9 @@ void test()
     printf("test add in file a");
 }
 
+void testb(){ // 這邊也加一個新的function 看看
+    printf("say hello world!");
+}
 int shmid;
 key_t key = KEY;
 int demo_shmid;//
