@@ -8,4 +8,5 @@ sudo ./merge
 ./demo.c
 ```
 a
-add in file b
+delete and add new line in branch a
+modift in branch a
