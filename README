@@ -7,6 +7,7 @@ gcc -o ./demo ./demo.c
 sudo ./merge 
 ./demo.c
 ```
-a
+modify in branch a 3
 delete and add new line in branch a
-modift in branch a
+modify in branch a
+modify in branch a 2
