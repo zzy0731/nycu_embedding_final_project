@@ -14,6 +14,10 @@
 #define KEY 1234
 pthread_barrier_t priority_barrier, batch_barrier; // 定義一個柵欄變量
 pthread_mutex_t lock; // 定義一個全局的 mutex
+void test()
+{
+    printf("test add in file a");
+}
 
 int shmid;
 key_t key = KEY;
